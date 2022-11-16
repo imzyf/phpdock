@@ -1,0 +1,8 @@
+ARG LARADOCK_PHP_VERSION
+FROM yifans/phpdock:${LARADOCK_PHP_VERSION}-php-fpm
+
+WORKDIR /var/www
+
+CMD ["php-fpm"]
+
+EXPOSE 9000
