@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 从上游原文 .upstream/.env.example 生成项目根的 .env.example。
+# 从上游原文 bin/.upstream/.env.example 生成项目根的 .env.example。
 #
 # 分两步：
 #   1. 裁剪 PRUNE_SECTIONS 中列出的 `### 标题 ###` 段落（本项目用不到的服务/
@@ -16,11 +16,11 @@ set -euo pipefail
 
 ROOT_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 
-SRC_FILE="${ROOT_DIR}/.upstream/.env.example"
+SRC_FILE="${ROOT_DIR}/bin/.upstream/.env.example"
 PATCH_FILE="${ROOT_DIR}/bin/patch/.env.example"
 DEST_FILE="${ROOT_DIR}/.env.example"
 
-# 要裁剪的段落标题（对应 .upstream/.env.example 里的 `### 标题 ###` 行）。
+# 要裁剪的段落标题（对应 bin/.upstream/.env.example 里的 `### 标题 ###` 行）。
 PRUNE_SECTIONS=(
   "Phalcon Version"
   "Windows Path"

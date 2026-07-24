@@ -6,7 +6,6 @@ networks:
 volumes:
   docker-in-docker:
     driver: ${VOLUMES_DRIVER}
-
 include:
   - path: docker-in-docker/compose.yml
     project_directory: .

@@ -19,14 +19,22 @@ SYNC_DIRS=(
 
 # 要从上游拉取的独立文件。格式 "上游路径" 或 "上游路径:本地路径"（改名落地）。
 SYNC_FILES=(
-  .env.example:.upstream/.env.example
-  docker-compose.multi-php.yml:.upstream/docker-compose.multi-php.yml
-  docker-compose.yml:.upstream/docker-compose.yml
-  laradock:.upstream/laradock
+  .env.example:bin/.upstream/.env.example
+  docker-compose.multi-php.yml:bin/.upstream/docker-compose.multi-php.yml
+  docker-compose.yml:bin/.upstream/docker-compose.yml
+  laradock:bin/.upstream/laradock
+  php-fpm/compose.yml:bin/.upstream/php-fpm/compose.yml
+  php-worker/compose.yml:bin/.upstream/php-worker/compose.yml
+  workspace/compose.yml:bin/.upstream/workspace/compose.yml
 )
 
 # 从同步中排除的本地化文件（rsync --exclude）。
 EXCLUDE_GLOBS=(
+  'php-fpm/aerospike.ini'
+  'php-fpm/laravel.ini'
+  'php-fpm/mysql.ini'
+  'php-fpm/opcache.ini'
+  'php-fpm/phalcon.ini'
   'php-fpm/php5*.ini'
   'php-fpm/php7*.ini'
   'php-fpm/php8.0.ini'
@@ -35,6 +43,9 @@ EXCLUDE_GLOBS=(
   'php-fpm/php8.3.ini'
   'php-fpm/php8.4.ini'
   'php-fpm/Dockerfile'
+  'php-fpm/compose.yml'
   'php-worker/Dockerfile'
+  'php-worker/compose.yml'
   'workspace/Dockerfile'
+  'workspace/compose.yml'
 )

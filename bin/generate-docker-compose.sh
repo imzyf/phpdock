@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 从上游原文 .upstream/docker-compose.yml 修剪，只保留 SYNC_DIRS（见
+# 从上游原文 bin/.upstream/docker-compose.yml 修剪，只保留 SYNC_DIRS（见
 # .sync-config.sh）中的服务，输出到项目根的 docker-compose.yml。
 #
 # 上游的 docker-compose.yml 使用 `include:` 模块化格式：每个服务是一个
@@ -15,8 +15,13 @@ set -euo pipefail
 ROOT_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 source "$(dirname "${BASH_SOURCE[0]}")/.sync-config.sh"
 
-SRC_FILE="${ROOT_DIR}/.upstream/docker-compose.yml"
+SRC_FILE="${ROOT_DIR}/bin/.upstream/docker-compose.yml"
 DEST_FILE="${ROOT_DIR}/docker-compose.yml"
+
+if ! command -v yq >/dev/null 2>&1; then
+  echo "!! yq is required (https://github.com/mikefarah/yq)" >&2
+  exit 1
+fi
 
 if [[ ! -f "${SRC_FILE}" ]]; then
   echo "!! Skipping: ${SRC_FILE} not found" >&2
@@ -24,41 +29,16 @@ if [[ ! -f "${SRC_FILE}" ]]; then
 fi
 
 echo "==> Pruning ${SRC_FILE} include/volumes not in SYNC_DIRS -> ${DEST_FILE}"
-tmp_file="$(mktemp)"
-awk -v names="${SYNC_DIRS[*]}" '
-  BEGIN {
-    n = split(names, arr, " ")
-    for (i = 1; i <= n; i++) keepset[arr[i]] = 1
-    section = ""
-    keep = 1
-  }
-  # 空行原样保留，用于分隔各段。
-  /^$/ { print; next }
-  # 顶层段落标题（networks:/volumes:/include:）。
-  /^[A-Za-z][A-Za-z0-9_-]*:$/ {
-    section = substr($0, 1, length($0) - 1)
-    keep = 1
-    print
-    next
-  }
-  # volumes 段：命名卷 `  <name>:`，仅保留 SYNC_DIRS 中的。
-  section == "volumes" && /^  [A-Za-z0-9_.-]+:$/ {
-    key = substr($0, 3, length($0) - 3)
-    keep = (key in keepset)
-    if (keep) print
-    next
-  }
-  # include 段：每个条目以 `  - path: <dir>/compose.yml` 开始。
-  section == "include" && /^  - path:/ {
-    slash = index($3, "/")
-    dir = (slash ? substr($3, 1, slash - 1) : $3)
-    keep = (dir in keepset)
-    if (keep) print
-    next
-  }
-  # 段内其余（缩进）行，跟随其所属条目的保留状态。
-  { if (keep) print }
-' "${SRC_FILE}" > "${tmp_file}"
-mv "${tmp_file}" "${DEST_FILE}"
+
+# yq 的 load() 只能从文件读取，这里把 SYNC_DIRS 写成一个 YAML 列表文件供表达式引用。
+names_file="$(mktemp)"
+trap 'rm -f "${names_file}"' EXIT
+printf -- '- %s\n' "${SYNC_DIRS[@]}" > "${names_file}"
+
+NAMES_FILE="${names_file}" yq eval '
+  (load(strenv(NAMES_FILE))) as $names |
+  .include |= [.[] | select((.path | split("/")[0]) as $d | $names | contains([$d]))] |
+  .volumes |= with_entries(select(.key as $k | $names | contains([$k])))
+' "${SRC_FILE}" > "${DEST_FILE}"
 
 echo "==> Done. Kept services: ${SYNC_DIRS[*]}"

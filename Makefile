@@ -12,6 +12,7 @@ help: ## Show this help
 
 sync: ## Pull latest files from upstream, then regenerate .env.laradock
 	bin/sync-upstream.sh
+	make customized
 
 sync-force: ## Sync from upstream, ignoring the clone cache
 	LCC_SYNC_CACHE_TTL=0 make sync
@@ -20,6 +21,7 @@ customized: ## Regenerate customized compose, env, and Dockerfiles
 	bin/generate-docker-compose.sh
 	bin/generate-env-example.sh
 	bin/generate-dockerfiles.sh
+	bin/generate-service-compose.sh
 
 ##@ Docker
 
