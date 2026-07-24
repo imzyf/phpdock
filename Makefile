@@ -1,32 +1,39 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help sync up up-all down build
+.PHONY: help sync sync-force customized up up-all down build
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@awk 'BEGIN {FS = ":.*?## "} \
+		/^##@/ {printf "\n\033[1m%s\033[0m\n", substr($$0, 5); next} \
+		/^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}' \
+		$(MAKEFILE_LIST)
 
-sync: ## Sync upstream laradock
+##@ Sync
+
+sync: ## Pull latest files from upstream, then regenerate .env.laradock
 	bin/sync-upstream.sh
-	bin/prune-compose.sh
-	bin/apply-env-preference.sh
-	bin/prune-php-ini.sh
-	bin/prune-build-args.sh
-	bin/patch-postgres-data-path.sh
-	bin/apply-templates.sh
-## must last one
-	bin/prune-unused-env.sh
 
-up: .env ## Start core containers (php-fpm, nginx)
+sync-force: ## Sync from upstream, ignoring the clone cache
+	LCC_SYNC_CACHE_TTL=0 make sync
+
+customized: ## Regenerate customized compose, env, and Dockerfiles
+	bin/generate-docker-compose.sh
+	bin/generate-env-example.sh
+	bin/generate-dockerfiles.sh
+
+##@ Docker
+
+up: .env ## Start core containers (php-fpm, nginx, postgres, redis)
 	docker-compose up -d php-fpm nginx postgres redis
 
 up-all: .env ## Start all containers
 	docker-compose up -d
 
-.env:
-	@if [ ! -f .env ]; then cp .env.example .env; fi
-
 down: ## Stop and remove all containers
 	docker-compose down
 
-build: ## Build (or rebuild) all images
+build: ## Build (or rebuild) core images
 	docker-compose build php-fpm nginx postgres redis
+
+.env:
+	@if [ ! -f .env ]; then cp .env.example .env; fi

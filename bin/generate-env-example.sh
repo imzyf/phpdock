@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# 从上游原文 .upstream/.env.example 生成项目根的 .env.example。
+#
+# 分两步：
+#   1. 裁剪 PRUNE_SECTIONS 中列出的 `### 标题 ###` 段落（本项目用不到的服务/
+#      平台配置，如 Phalcon、Windows、ELK 等），连同段内注释与空行一并删除。
+#   2. 套用 bin/patch/.env.example 里的 KEY=value：
+#      - 若 KEY 已存在，就地替换其值（update）；
+#      - 若 KEY 不存在，追加到文件末尾的 `### Overrides (phpdock) ###` 段（add）。
+#      patch 文件里的 `#` 注释（如 `# Update` / `# Add`）仅作人肉分组，脚本忽略。
+#
+# 使用方法：bin/generate-env-example.sh
+
+set -euo pipefail
+
+ROOT_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+
+SRC_FILE="${ROOT_DIR}/.upstream/.env.example"
+PATCH_FILE="${ROOT_DIR}/bin/patch/.env.example"
+DEST_FILE="${ROOT_DIR}/.env.example"
+
+# 要裁剪的段落标题（对应 .upstream/.env.example 里的 `### 标题 ###` 行）。
+PRUNE_SECTIONS=(
+  "Phalcon Version"
+  "Windows Path"
+  "VARNISH"
+  "BLACKFIRE"
+  "GITLAB"
+  "SONARQUBE"
+  "ELK Stack"
+  "Keycloak"
+)
+
+if [[ ! -f "${SRC_FILE}" ]]; then
+  echo "!! Skipping: ${SRC_FILE} not found" >&2
+  exit 0
+fi
+
+if [[ ! -f "${PATCH_FILE}" ]]; then
+  echo "!! ${PATCH_FILE} not found; will prune only (no patch applied)" >&2
+  PATCH_FILE=/dev/null
+fi
+
+# 段落标题可能含空格（"Phalcon Version"），用 `|` 拼成一个字符串传给 awk。
+IFS='|' prune_joined="${PRUNE_SECTIONS[*]}"
+unset IFS
+
+echo "==> Generating ${DEST_FILE} from ${SRC_FILE}"
+echo "    pruning sections: ${PRUNE_SECTIONS[*]}"
+
+# patch 文件相对根目录的路径，写进 OVERWRITTEN 注释里指明来源。
+patch_rel="${PATCH_FILE#"${ROOT_DIR}"/}"
+
+tmp_file="$(mktemp)"
+awk -v prune_list="${prune_joined}" -v patch_rel="${patch_rel}" '
+  # 打印并记录“上一行是否为空行”，便于末尾追加时避免多余空行。
+  function emit(s) { print s; last_blank = (s == "") }
+
+  BEGIN {
+    n = split(prune_list, arr, "|")
+    for (i = 1; i <= n; i++) prune[arr[i]] = 1
+    keep = 1
+    last_blank = 0
+  }
+
+  # 第一个文件是 patch：收集 KEY=value（忽略注释与空行），记住出现顺序。
+  FNR == NR {
+    if ($0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/) next
+    if ($0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+      eq = index($0, "=")
+      key = substr($0, 1, eq - 1)
+      if (!(key in patch)) order[++npatch] = key
+      patch[key] = substr($0, eq + 1)
+    }
+    next
+  }
+
+  # 第二个文件是上游 .env.example，开始裁剪 + 套用 patch。
+
+  # 单行段落标题 `### 标题 ###...`：据标题决定该段保留与否。
+  /^### / {
+    title = $0
+    sub(/^### /, "", title)
+    sub(/[[:space:]]*#+$/, "", title)
+    keep = (title in prune) ? 0 : 1
+    if (keep) emit($0)
+    next
+  }
+
+  # 大块分隔符（4+ 个 `#`，如文件头与 "Containers Customization" 分隔）：
+  # 始终保留，并把 keep 复位为 1。
+  /^####/ {
+    keep = 1
+    emit($0)
+    next
+  }
+
+  # KEY=value 行：若命中 patch 则就地替换值，并在上一行标注上游原默认值。
+  keep && /^[A-Za-z_][A-Za-z0-9_]*=/ {
+    eq = index($0, "=")
+    key = substr($0, 1, eq - 1)
+    if (key in patch) {
+      emit("# OVERWRITTEN by " patch_rel " (upstream default: " substr($0, eq + 1) ")")
+      emit(key "=" patch[key])
+      consumed[key] = 1
+    } else {
+      emit($0)
+    }
+    next
+  }
+
+  # 段内其余行（注释、空行），跟随所属段的保留状态。
+  { if (keep) emit($0) }
+
+  # 未被就地替换的 patch key，作为新增追加到末尾。
+  END {
+    first = 1
+    for (i = 1; i <= npatch; i++) {
+      k = order[i]
+      if (k in consumed) continue
+      if (first) {
+        if (!last_blank) emit("")
+        emit("### Overrides (phpdock) ###")
+        first = 0
+      }
+      emit(k "=" patch[k])
+    }
+  }
+' "${PATCH_FILE}" "${SRC_FILE}" > "${tmp_file}"
+mv "${tmp_file}" "${DEST_FILE}"
+
+echo "==> Done. Wrote ${DEST_FILE}"
