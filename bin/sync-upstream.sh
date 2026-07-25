@@ -51,15 +51,15 @@ else
   date +%s > "${CACHE_MARKER}"
 fi
 
-shopt -s dotglob
+shopt -s dotglob extglob
 
-# rsync 排除我们不想复制的文件。rsync 即使在匹配是字面源参数时也会跳过
-# （不仅仅在递归期间），所以这个方法同时覆盖顶级文件和嵌套文件 —— 不需要
-# 单独的 bash glob 匹配。
-exclude_args=()
-for glob in "${EXCLUDE_GLOBS[@]:-}"; do
-  [[ -n "${glob}" ]] && exclude_args+=( --exclude="${glob}" )
-done
+# EXCLUDE_GLOBS 语义是「完全不碰」：不从上游复制，也不删本地同名文件，所以
+# 下面的循环整条跳过。（rsync --exclude 做不到：那里是先 rm 再 rsync，只排除
+# 复制会把本地手写的 php-fpm/Dockerfile 删掉而不补回来。）
+#
+# 把数组压成一个 extglob 备选式 @(a|b|c)；空数组得到 @()，只匹配空串即谁都不保护。
+# 只对 SYNC_DIRS 下的顶级条目（<dir>/<name>）生效，更深的路径不支持。
+protected="@($(IFS='|'; printf '%s' "${EXCLUDE_GLOBS[*]:-}"))"
 
 for dir in "${SYNC_DIRS[@]}"; do
   src="${clone_dir}/${dir}"
@@ -72,10 +72,13 @@ for dir in "${SYNC_DIRS[@]}"; do
   # 刷新原位置上游拥有的每个条目。仅存在于本地的条目永远不会被触碰。
   for entry in "${src}"/*; do
     name="$(basename "${entry}")"
+    # shellcheck disable=SC2053  # 右侧要当 glob 用，不能加引号
+    if [[ "${dir}/${name}" == $protected ]]; then
+      echo "  · ${dir}/${name} (protected, left as-is)"
+      continue
+    fi
     rm -rf "${ROOT_DIR:?}/${dir}/${name}"
-    # -q：被排除的顶级条目是预期的且无声的；
-    # rsync 否则会为其警告"跳过排除的文件"。
-    rsync -aq "${exclude_args[@]}" "${entry}" "${ROOT_DIR}/${dir}/"
+    rsync -aq "${entry}" "${ROOT_DIR}/${dir}/"
     echo "  - ${dir}/${name}"
   done
 done

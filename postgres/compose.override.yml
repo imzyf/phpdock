@@ -1,5 +1,8 @@
 services:
   postgres:
+    volumes: !override
+      - ${DATA_PATH_HOST}/postgres:/var/lib/postgresql
+      - ${POSTGRES_ENTRYPOINT_INITDB}:/docker-entrypoint-initdb.d
     environment: !override
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}

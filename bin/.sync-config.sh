@@ -21,12 +21,12 @@ SYNC_DIRS=(
 # 格式 "上游路径" 或 "上游路径:本地路径"（改名落地）。
 SYNC_FILES=(
   .env.example:.env.upstream
-  docker-compose.multi-php.yml:bin/.upstream/docker-compose.multi-php.yml
   docker-compose.yml:bin/.upstream/docker-compose.yml
   laradock:bin/.upstream/laradock
 )
 
 # 同步时「完全不碰」的路径：既不从上游复制，也不删除本地已有的同名文件。
+# 只匹配 SYNC_DIRS 下的顶级条目（<dir>/<name>），更深的路径不支持。
 # 因此这里同时用于两件事：
 #   1. 保护本项目手写、且与上游同名的文件（三个 Dockerfile）；
 #   2. 剪掉用不到的上游文件（那些 .ini 本地就不存在，跳过即保持不存在）。
