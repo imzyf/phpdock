@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help sync sync-force customized up up-all down build
+.PHONY: help sync sync-force generate config up up-all down build
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} \
@@ -10,20 +10,22 @@ help: ## Show this help
 
 ##@ Sync
 
-sync: ## Pull latest files from upstream, then regenerate .env.laradock
+sync: ## Pull latest files from upstream, regenerate, then review with `git diff`
 	bin/sync-upstream.sh
-	make customized
+	@$(MAKE) --no-print-directory generate
+	@$(MAKE) --no-print-directory config >/dev/null \
+		&& echo "==> docker compose config OK. Review upstream changes: git diff"
 
 sync-force: ## Sync from upstream, ignoring the clone cache
-	LCC_SYNC_CACHE_TTL=0 make sync
+	LCC_SYNC_CACHE_TTL=0 $(MAKE) sync
 
-customized: ## Regenerate customized compose, env, and Dockerfiles
+generate: ## Regenerate docker-compose.yml from upstream + */compose.override.yml
 	bin/generate-docker-compose.sh
-	bin/generate-env-example.sh
-	bin/generate-dockerfiles.sh
-	bin/generate-service-compose.sh
 
 ##@ Docker
+
+config: .env ## Print the fully merged compose config (upstream + */compose.override.yml)
+	docker-compose config
 
 up: .env ## Start core containers (php-fpm, nginx, postgres, redis)
 	docker-compose up -d php-fpm nginx postgres redis

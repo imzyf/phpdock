@@ -1,2 +1,0 @@
-ARG LARADOCK_PHP_VERSION
-FROM yifans/phpdock:${LARADOCK_PHP_VERSION}-workspace

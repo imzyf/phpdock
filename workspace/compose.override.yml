@@ -1,0 +1,12 @@
+# phpdock 对同目录 compose.yml（上游原文）的定制层。
+# 说明见 php-fpm/compose.override.yml。
+
+services:
+  workspace:
+    build: !override
+      context: ./workspace
+      args:
+        - LARADOCK_PHP_VERSION=${PHP_VERSION}
+        - http_proxy
+        - https_proxy
+        - no_proxy

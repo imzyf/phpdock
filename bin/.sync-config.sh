@@ -17,19 +17,24 @@ SYNC_DIRS=(
   workspace
 )
 
-# 要从上游拉取的独立文件。格式 "上游路径" 或 "上游路径:本地路径"（改名落地）。
+# 只镜像到 bin/.upstream/ 供对照的文件（本项目有手写的等价物，见各文件顶部注释）。
+# 格式 "上游路径" 或 "上游路径:本地路径"（改名落地）。
 SYNC_FILES=(
-  .env.example:bin/.upstream/.env.example
+  .env.example:.env.upstream
   docker-compose.multi-php.yml:bin/.upstream/docker-compose.multi-php.yml
   docker-compose.yml:bin/.upstream/docker-compose.yml
   laradock:bin/.upstream/laradock
-  php-fpm/compose.yml:bin/.upstream/php-fpm/compose.yml
-  php-worker/compose.yml:bin/.upstream/php-worker/compose.yml
-  workspace/compose.yml:bin/.upstream/workspace/compose.yml
 )
 
-# 从同步中排除的本地化文件（rsync --exclude）。
+# 同步时「完全不碰」的路径：既不从上游复制，也不删除本地已有的同名文件。
+# 因此这里同时用于两件事：
+#   1. 保护本项目手写、且与上游同名的文件（三个 Dockerfile）；
+#   2. 剪掉用不到的上游文件（那些 .ini 本地就不存在，跳过即保持不存在）。
+#
+# 服务的 compose.yml 不在此列 —— 它们从上游原样同步，本项目的定制放在
+# <service>/compose.override.yml，由根 docker-compose.yml 的 include 列表合并上去。
 EXCLUDE_GLOBS=(
+  # 用不到的 PHP 版本 / 扩展配置，保持目录干净
   'php-fpm/aerospike.ini'
   'php-fpm/laravel.ini'
   'php-fpm/mysql.ini'
@@ -42,10 +47,8 @@ EXCLUDE_GLOBS=(
   'php-fpm/php8.2.ini'
   'php-fpm/php8.3.ini'
   'php-fpm/php8.4.ini'
+  # 改用自建预构建镜像的 Dockerfile（手写，不要被上游覆盖）
   'php-fpm/Dockerfile'
-  'php-fpm/compose.yml'
   'php-worker/Dockerfile'
-  'php-worker/compose.yml'
   'workspace/Dockerfile'
-  'workspace/compose.yml'
 )

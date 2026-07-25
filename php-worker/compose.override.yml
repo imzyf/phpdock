@@ -1,0 +1,6 @@
+services:
+  php-worker:
+    build: !override
+      context: ./php-worker
+      args:
+        - LARADOCK_PHP_VERSION=${PHP_VERSION}

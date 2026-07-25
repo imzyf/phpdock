@@ -1,5 +1,10 @@
 {
-  "files.associations": {
-    "*-Dockerfile": "dockerfile"
-  }
+  "yaml.customTags": [
+    "!override mapping",
+    "!override sequence",
+    "!override scalar",
+    "!reset mapping",
+    "!reset sequence",
+    "!reset scalar"
+  ]
 }

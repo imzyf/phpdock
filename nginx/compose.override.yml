@@ -1,0 +1,5 @@
+services:
+  nginx:
+    ports: !override
+      - "${NGINX_HOST_HTTP_PORT}:80"
+      - "${NGINX_HOST_HTTPS_PORT}:443"

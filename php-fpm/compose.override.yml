@@ -1,0 +1,9 @@
+services:
+  php-fpm:
+    build: !override
+      context: ./php-fpm
+      args:
+        - LARADOCK_PHP_VERSION=${PHP_VERSION}
+        - http_proxy
+        - https_proxy
+        - no_proxy
