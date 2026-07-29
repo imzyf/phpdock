@@ -51,4 +51,25 @@ EXCLUDE_GLOBS=(
   'php-fpm/Dockerfile'
   'php-worker/Dockerfile'
   'workspace/Dockerfile'
+  # 以下文件只被上游 Dockerfile 在 build 阶段 COPY。本项目这三个 Dockerfile
+  # 都是预构建镜像的一行 FROM，不 COPY 任何东西；而它们也没有被对应的
+  # compose.yml bind-mount 进容器，所以留在本地纯属噪音。
+  # 判据：被 runtime bind-mount 的留（如 php-fpm/php8.5.ini、
+  # php-worker/supervisord.d），只在 build-time COPY 的删。
+  # 想退回本地 build 上游 Dockerfile 时，删掉对应的 glob 再同步一次即可拉回。
+  'php-fpm/xdebug.ini'
+  'php-fpm/xhprof.ini'           # 上游那行 COPY 本身就是注释掉的，连 laradock 都没在用
+  'php-fpm/xlaravel.pool.conf'
+  'php-worker/supervisord.conf'
+  'workspace/aerospike.ini'      # 上游 Dockerfile 是 echo 内联生成的，从没引用过本文件
+  'workspace/aliases.sh'
+  'workspace/auth.json'
+  'workspace/ca-certificates'
+  'workspace/composer.json'
+  'workspace/crontab'
+  'workspace/git-prompt.sh'
+  'workspace/insecure_id_rsa*'   # demo 私钥，会持续触发 secret scanning 告警
+  'workspace/mc'
+  'workspace/.npmrc'
+  'workspace/xdebug.ini'
 )

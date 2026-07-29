@@ -36,7 +36,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="${SCRIPT_DIR%/*}"
+# shellcheck source=bin/.sync-config.sh
 source "${SCRIPT_DIR}/.sync-config.sh"
 
 SRC_FILE="${ROOT_DIR}/bin/.upstream/docker-compose.yml"
@@ -58,13 +59,14 @@ fi
 shopt -s nullglob
 override_services=()
 for f in "${ROOT_DIR}"/*/"${OVERRIDE_BASENAME}"; do
-  override_services+=( "$(basename "$(dirname "${f}")")" )
+  service_dir="${f%/*}"
+  override_services+=( "${service_dir##*/}" )
 done
 shopt -u nullglob
 
 echo "==> Generating ${DEST_FILE#"${ROOT_DIR}"/} from ${SRC_FILE#"${ROOT_DIR}"/}"
 echo "    keeping services : ${SYNC_DIRS[*]}"
-echo "    wiring overrides : ${override_services[*]:-（无）}"
+echo "    wiring overrides : ${override_services[*]:-(none)}"
 echo "    env fallback     : ${UPSTREAM_ENV_REL}"
 
 # yq 的 load() 只能从文件读取，把两份清单写成 YAML 列表文件供表达式引用。
@@ -94,6 +96,8 @@ BANNER
 # ④ 每个条目的 env_file 前置 .env.upstream 兜底（原来是字符串就先包成列表）。
 #    列表内后者覆盖前者，放最前 = 优先级最低，上游 <service>/defaults.env 说了算。
 # （本机 yq 不支持 `if/then/else`，用 `with(select(…); …)` 表达条件更新。）
+# $names / $ovr 是 yq 的变量，表达式必须单引号包住
+# shellcheck disable=SC2016
 NAMES_FILE="${names_file}" OVERRIDES_FILE="${ovr_file}" \
 OVERRIDE_BASENAME="${OVERRIDE_BASENAME}" UPSTREAM_ENV_REL="${UPSTREAM_ENV_REL}" yq eval '
   (load(strenv(NAMES_FILE)) // []) as $names |
