@@ -15,19 +15,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
+        # A shallow clone (fetch-depth: 1) is enough: `make sync` only reads
+        # working-tree files, and create-pull-request branches off HEAD.
         name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       -
-        name: Sync files from laradock/laradock (make sync)
-        run: make sync
+        # CI always runs on a fresh runner, so the clone cache is cold by
+        # definition - `sync-force` makes that explicit instead of relying on
+        # the TTL. `make sync` also regenerates docker-compose.yml and runs
+        # `docker compose config`, so a sync that breaks the compose file
+        # fails here rather than after the PR is merged.
+        name: Sync files from laradock/laradock (make sync-force)
+        id: sync
+        # The upstream commit is laradock's, recorded only so the PR can point
+        # at the exact version it synced from.
+        run: |
+          make sync-force
+          echo "upstream-commit=$(git -C bin/.cache/upstream rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       -
         # Creates (or updates) a PR only when `make sync` produced a diff;
         # a no-op otherwise. Uses the default GITHUB_TOKEN, so the PR it
-        # opens will NOT trigger other workflows — merge it by hand.
+        # opens will NOT trigger other workflows - merge it by hand.
         name: Create pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
-          commit-message: "Sync files from laradock/laradock upstream"
+          commit-message: |
+            Sync files from laradock/laradock upstream
+
+            Upstream commit: ${{ steps.sync.outputs.upstream-commit }}
           branch: sync/laradock-upstream
           delete-branch: true
           title: "Sync files from laradock/laradock upstream"
@@ -35,4 +50,8 @@ jobs:
             Automated `make sync` picked up changes from
             [laradock/laradock](https://github.com/laradock/laradock) upstream.
 
-            Review the diff before merging.
+            Synced up to [`${{ steps.sync.outputs.upstream-commit }}`](https://github.com/laradock/laradock/commit/${{ steps.sync.outputs.upstream-commit }}).
+
+            `docker compose config` already passed on this branch, so the
+            generated `docker-compose.yml` is at least valid. Review the diff
+            before merging.

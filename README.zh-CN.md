@@ -22,7 +22,7 @@ PHPDOCK 在不抛弃 Laradock 的前提下解决这三件事：
 make up       # php-fpm, nginx, postgres, redis
 make up-all   # 全部
 make down
-docker-compose exec workspace bash
+docker compose exec workspace bash
 ```
 
 首次运行 `make up` 会从 `.env.example` 生成 `.env`。其余命令见 `make help`。
@@ -40,7 +40,7 @@ docker-compose exec workspace bash
 | `bin/.sync-config.sh` | **你的** —— 保留哪些服务、哪些文件 |
 | `docker-compose.yml` | 生成的 —— 跑 `make generate` |
 
-要定制某个服务，往它的目录里丢一个 `compose.override.yml`，再跑 `make generate`，根目录的 `include` 列表会自动接好。用 `docker-compose config` 检查结果。想看目前定制了哪些：`ls */compose.override.yml`。
+要定制某个服务，往它的目录里丢一个 `compose.override.yml`，再跑 `make generate`，根目录的 `include` 列表会自动接好。用 `docker compose config` 检查结果。想看目前定制了哪些：`ls */compose.override.yml`。
 
 ## 跟上上游
 

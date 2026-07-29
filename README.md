@@ -38,7 +38,7 @@ PHPDOCK answers all three without leaving Laradock behind:
 make up       # php-fpm, nginx, postgres, redis
 make up-all   # everything
 make down
-docker-compose exec workspace bash
+docker compose exec workspace bash
 ```
 
 `make up` creates `.env` from `.env.example` on first run. `make help`
@@ -61,7 +61,7 @@ Your `.env` always wins.
 
 To customize a service, drop a `compose.override.yml` into its directory
 and run `make generate`; the root `include` list is wired up for you.
-Check the result with `docker-compose config`. To see everything
+Check the result with `docker compose config`. To see everything
 customized so far:
 `ls */compose.override.yml`.
 

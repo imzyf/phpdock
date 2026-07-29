@@ -1,5 +1,10 @@
 .DEFAULT_GOAL := help
 
+# Compose v2 (the `docker compose` plugin). GitHub runners no longer ship the
+# standalone v1 binary, so `docker-compose` is not a portable spelling.
+# Override with `make COMPOSE=docker-compose <target>` if you still need v1.
+COMPOSE ?= docker compose
+
 .PHONY: help sync sync-force generate up up-all down build
 
 help: ## Show this help
@@ -13,7 +18,7 @@ help: ## Show this help
 sync: .env ## Pull latest files from upstream, regenerate, then review with `git diff`
 	bin/sync-upstream.sh
 	@$(MAKE) --no-print-directory generate
-	@docker-compose config >/dev/null \
+	@$(COMPOSE) config >/dev/null \
 		&& echo "==> docker compose config OK. Review upstream changes: git diff"
 
 sync-force: ## Sync from upstream, ignoring the clone cache
@@ -25,16 +30,16 @@ generate: ## Regenerate docker-compose.yml from upstream + */compose.override.ym
 ##@ Docker
 
 up: .env ## Start core containers (php-fpm, nginx, postgres, redis)
-	docker-compose up -d php-fpm nginx postgres redis
+	$(COMPOSE) up -d php-fpm nginx postgres redis
 
 up-all: .env ## Start all containers
-	docker-compose up -d
+	$(COMPOSE) up -d
 
 down: ## Stop and remove all containers
-	docker-compose down
+	$(COMPOSE) down
 
 build: ## Build (or rebuild) core images
-	docker-compose build php-fpm nginx postgres redis
+	$(COMPOSE) build php-fpm nginx postgres redis
 
 .env:
 	@if [ ! -f .env ]; then cp .env.example .env; fi
