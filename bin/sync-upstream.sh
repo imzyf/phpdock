@@ -3,11 +3,12 @@
 # 从上游仓库（配置见 .sync-config.sh）同步文件到本项目。
 #
 # 对于 SYNC_DIRS 中的每个目录（见 .sync-config.sh），上游拥有的文件会被
-# 刷新到原位置。你在旁边添加的本地文件不会被触碰，这样每次同步后可以用
-# `git diff` 看到上游的更改，然后手动移植。
+# 刷新到原位置；IMAGE_DIRS 中的目录则刷新到 images/<dir>/。你在旁边添加的
+# 本地文件不会被触碰，这样每次同步后可以用 `git diff` 看到上游的更改，
+# 然后手动移植。
 #
-# 上游的克隆是稀疏的（仅限 SYNC_DIRS + SYNC_FILES），并在 CACHE_DIR 下
-# 被缓存 CACHE_TTL_SECONDS（默认 1 天），所以同一天重新运行会重用它。
+# 上游的克隆是稀疏的（仅限 SYNC_DIRS + IMAGE_DIRS + SYNC_FILES），并在
+# CACHE_DIR 下被缓存 CACHE_TTL_SECONDS（默认 1 天），所以同一天重新运行会重用它。
 # 删除 CACHE_DIR 或设置 LCC_SYNC_CACHE_TTL=0 来强制重新克隆。
 #
 # 使用方法：bin/sync-upstream.sh
@@ -39,7 +40,7 @@ else
   # 每个我们想要检出的路径：同步目录和独立文件（取 SYNC_FILES 条目
   # ":" 前的上游路径部分）。
   sparse_paths=()
-  for p in "${SYNC_DIRS[@]}" "${SYNC_FILES[@]}"; do
+  for p in "${SYNC_DIRS[@]}" "${IMAGE_DIRS[@]}" "${SYNC_FILES[@]}"; do
     sparse_paths+=( "/${p%%:*}" )
   done
   echo "==> Cloning ${UPSTREAM_REPO} (${UPSTREAM_BRANCH}: ${sparse_paths[*]#/})"
@@ -68,31 +69,38 @@ is_excluded() {
   return 1
 }
 
-for dir in "${SYNC_DIRS[@]}"; do
-  src="${clone_dir}/${dir}"
+# 每项是 "上游目录:本地目录"。
+dir_pairs=()
+for dir in "${SYNC_DIRS[@]}"; do dir_pairs+=( "${dir}:${dir}" ); done
+for dir in "${IMAGE_DIRS[@]}"; do dir_pairs+=( "${dir}:images/${dir}" ); done
+
+for pair in "${dir_pairs[@]}"; do
+  src_dir="${pair%%:*}"
+  dest_dir="${pair#*:}"
+  src="${clone_dir}/${src_dir}"
   # 配置里的目录在上游没了 = 同步已失效，直接失败，别留下过期的本地副本。
   if [[ ! -d "${src}" ]]; then
-    echo "!! ${dir} not found upstream - update SYNC_DIRS in bin/.sync-config.sh" >&2
+    echo "!! ${src_dir} not found upstream - update SYNC_DIRS / IMAGE_DIRS in bin/.sync-config.sh" >&2
     exit 1
   fi
   entries=( "${src}"/* )
   if (( ${#entries[@]} == 0 )); then
-    echo "!! ${dir} is empty upstream" >&2
+    echo "!! ${src_dir} is empty upstream" >&2
     exit 1
   fi
-  echo "==> Refreshing upstream files in ${dir}/ (local-only files preserved)"
-  mkdir -p "${ROOT_DIR}/${dir}"
+  echo "==> Refreshing upstream files in ${dest_dir}/ (local-only files preserved)"
+  mkdir -p "${ROOT_DIR}/${dest_dir}"
   # 刷新原位置上游拥有的每个条目。仅存在于本地的条目永远不会被触碰。
   for entry in "${entries[@]}"; do
     name="${entry##*/}"
     # 被排除的条目连同本地副本一起放过，不删也不覆盖。
-    if is_excluded "${dir}/${name}"; then
-      echo "  - ${dir}/${name} (excluded)"
+    if is_excluded "${dest_dir}/${name}"; then
+      echo "  - ${dest_dir}/${name} (excluded)"
       continue
     fi
-    rm -rf "${ROOT_DIR:?}/${dir}/${name}"
-    rsync -aq "${entry}" "${ROOT_DIR}/${dir}/"
-    echo "  - ${dir}/${name}"
+    rm -rf "${ROOT_DIR:?}/${dest_dir}/${name}"
+    rsync -aq "${entry}" "${ROOT_DIR}/${dest_dir}/"
+    echo "  - ${dest_dir}/${name}"
   done
 done
 

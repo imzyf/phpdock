@@ -1,0 +1,186 @@
+# 手动把 laradock 的三个镜像（php-fpm / php-worker / workspace）发布到 GitHub
+# Container Registry，用 workflow 自带的 GITHUB_TOKEN 登录，不需要额外的 secrets。
+#
+# ── 整体结构 ────────────────────────────────────────────────────────────────
+# build（矩阵：image × 架构，各一个 job）→ merge（矩阵：image，各一个 job）
+#
+# 拆成两段的唯一目的是甩掉 QEMU。以前是一个 job 里用 buildx 同时构建 amd64 +
+# arm64，arm64 走 QEMU 模拟，慢 5-10 倍。现在两个架构各自跑在原生 runner 上
+# （arm64 用 GitHub 免费的 ubuntu-24.04-arm），构建完只按 digest 推上去，再由
+# merge job 合成多架构 manifest。这是 Docker 官方 multi-platform CI 文档的写法。
+#
+# ── 为什么必须 push-by-digest ───────────────────────────────────────────────
+# 两个架构在两台机器上并行跑，彼此看不到对方的结果，所以不能在 build 阶段就往同一
+# 个 tag 上推——后推的会直接覆盖先推的，tag 最后只剩一个架构。改成各自推成「无 tag
+# 的 manifest」，把 digest 通过 artifact 传给 merge job，由它一次性合并并打 tag。
+#
+# ── 镜像名和 tag ───────────────────────────────────────────────────────────
+# 每个镜像一个仓库：ghcr.io/imzyf/phpdock/<image>。每次发布写两个 tag，指向
+# 同一份 manifest：
+#   8.5             滚动 tag，永远指向最新一版
+#   8.5-20261117    UTC 发布日期，用来锁版本和回滚；同一天再发布会覆盖它
+# 构建所用的 commit 写在镜像 label org.opencontainers.image.revision 里，
+# 用 docker buildx imagetools inspect <ref> --format '{{json .Image}}' 查看。
+#
+# ── 首次发布 ───────────────────────────────────────────────────────────────
+# ghcr.io 上新建的 package 默认是 private。三个镜像第一次发布后，要分别在
+# package 设置里改成 public，否则匿名 docker pull 会失败。workflow 改不了这个设置。
+
+name: laradock-image
+
+on:
+  # 只手动触发：构建很贵（三个镜像 × 两个架构），不该由 push 或定时任务带起来。
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY_IMAGE: ghcr.io/imzyf/phpdock
+
+jobs:
+  build:
+    # arm64 跑在 GitHub 免费的原生 arm runner 上，不再用 QEMU 模拟（快 5-10 倍）。
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    env:
+      # 只有主仓库才推送镜像；REGISTRY_IMAGE 在 imzyf 名下，fork 的 GITHUB_TOKEN
+      # 推不上去，所以 fork 只做构建验证。
+      # 下面所有推送相关的 step 都靠这个开关，fork 上会整段跳过而不是报错。
+      PUBLISH: ${{ github.repository == 'imzyf/phpdock' }}
+      # artifact 名字里不能有斜杠，所以要把 linux/arm64 压成 arm64 才能拼进去。
+      PLATFORM_PAIR: ${{ matrix.platform == 'linux/arm64' && 'arm64' || 'amd64' }}
+    strategy:
+      matrix:
+        php_version: ["8.5"]
+        image: [php-fpm, php-worker, workspace]
+        # 发布时两个架构各自在原生机器上并行构建；fork 只需要 amd64。
+        platform: ${{ fromJSON(github.repository == 'imzyf/phpdock' && '["linux/amd64","linux/arm64"]' || '["linux/amd64"]') }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v7
+      -
+        # 先验证 build-args.sh 本身，再让下一步消费它的输出。合并逻辑悄悄坏掉的后果是
+        # 带着错的（甚至空的）build args 构建成功并发布，比在这里炸掉难查得多。
+        # 一秒就跑完，所以不值得为「每个矩阵 job 重复跑」单独拆一个 job 出来。
+        name: Test build-args.sh
+        run: bin/test-build-args.sh
+      -
+        # bin/build-args.sh 把 images/.env.laradock 与 images/.env.laradock.preference
+        # 合并成去重的 NAME=value 行（preference 胜出）。
+        name: Merge build args from images/.env.laradock + images/.env.laradock.preference
+        id: build-args
+        run: |
+          {
+            echo 'args<<EOF'
+            bin/build-args.sh
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      -
+        name: Login to GitHub Container Registry
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      -
+        # 单架构镜像先按 digest 推送（不占用 tag），由 merge job 合成多架构 manifest。
+        # outputs 里三个参数的作用：
+        #   push-by-digest=true   推完不打 tag，只留 digest
+        #   name-canonical=true   把镜像名写进 manifest，让后面能按名字引用这个 digest
+        #   push=true             真的推到 registry
+        # fork 上换成 type=cacheonly：只验证 Dockerfile 能构建，产物直接丢掉。
+        name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: images/${{ matrix.image }}
+          file: images/${{ matrix.image }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY_IMAGE, matrix.image) || 'type=cacheonly' }}
+          # 关掉 provenance attestation：开着的话单架构构建会多套一层 index，
+          # 合成的 manifest 里多出 platform 为 unknown/unknown 的条目。
+          provenance: false
+          # source 让 ghcr.io 把 package 关联到本仓库；revision 记录构建所用的 commit。
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            ${{ steps.build-args.outputs.args }}
+            LARADOCK_PHP_VERSION=${{ matrix.php_version }}
+      -
+        # 把 digest 编码进「空文件的文件名」而不是写进文件内容，这样 merge job 只要
+        # glob 一下目录就能拿到全部 digest，不用读文件也不用解析 JSON。
+        # 去掉 sha256: 前缀是因为冒号在文件名里不安全。
+        name: Export digest
+        if: env.PUBLISH == 'true'
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+      -
+        name: Upload digest
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          # 名字里带上 image 和架构，merge job 才能按 image 精确 glob 出自己那两份。
+          name: digests-${{ matrix.php_version }}-${{ matrix.image }}-${{ env.PLATFORM_PAIR }}
+          # 传空文件容易静默失败，所以显式要求「没文件就报错」，宁可这里炸掉也别让
+          # merge job 拿着不完整的 digest 列表去合出一个缺架构的 manifest。
+          if-no-files-found: error
+          path: ${{ runner.temp }}/digests/*
+          # 只是 job 间传值，用完即弃。
+          retention-days: 1
+
+  merge:
+    # fork 上 build job 不推送任何 digest，没有可合并的东西，整个 job 跳过。
+    if: github.repository == 'imzyf/phpdock'
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php_version: ["8.5"]
+        image: [php-fpm, php-worker, workspace]
+    steps:
+      -
+        name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          # 尾部的 * 收掉 -amd64 / -arm64 两份。
+          pattern: digests-${{ matrix.php_version }}-${{ matrix.image }}-*
+          # 两份 artifact 解到同一个目录里（否则会各自带一层子目录，glob 就废了）。
+          merge-multiple: true
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      -
+        name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      -
+        # 把两个单架构 digest 合成一份多架构 manifest list，一次打上两个 tag。
+        # 一条 imagetools create 同时给两个 tag，保证它们必定指向同一份 manifest，
+        # 不会出现「快照和滚动 tag 内容不一致」。
+        name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          repo="${REGISTRY_IMAGE}/${{ matrix.image }}"
+          base="${repo}:${{ matrix.php_version }}"
+          # 用 UTC 取日期，避免不同时区的 runner 在同一时刻算出不同的日期。
+          dated="${base}-$(date -u +%Y%m%d)"
+          # 目录里的文件名就是 digest（见 build job 的 Export digest），glob 出来
+          # 拼成 repo@sha256:xxx 的引用列表喂给 imagetools。
+          mapfile -t refs < <(printf "${repo}@sha256:%s\n" *)
+          docker buildx imagetools create -t "$dated" -t "$base" "${refs[@]}"
+          # 立刻从 registry 回读一次确认发布结果：输出里应该恰好有 amd64 和 arm64
+          # 两个平台条目。
+          docker buildx imagetools inspect "$base"
