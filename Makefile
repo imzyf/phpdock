@@ -16,8 +16,8 @@ help: ## Show this help
 ##@ Sync
 
 sync: .env ## Pull latest files from upstream, regenerate, then review with `git diff`
-	bin/sync-upstream.sh
-	bin/extract-env.sh
+	.github/scripts/sync-upstream.sh
+	.github/scripts/extract-env.sh
 	@$(MAKE) --no-print-directory generate
 	@$(COMPOSE) config >/dev/null \
 		&& echo "==> docker compose config OK. Review upstream changes: git diff"
@@ -26,12 +26,12 @@ sync-force: ## Sync from upstream, ignoring the clone cache
 	LCC_SYNC_CACHE_TTL=0 $(MAKE) sync
 
 generate: ## Regenerate docker-compose.yml from upstream + */compose.override.yml
-	bin/generate-docker-compose.sh
+	.github/scripts/generate-docker-compose.sh
 
 ##@ Images
 
-test-args: ## Check that bin/build-args.sh still merges the image build args correctly
-	bin/test-build-args.sh
+test-args: ## Check that .github/scripts/build-args.sh still merges the image build args correctly
+	.github/scripts/test-build-args.sh
 
 ##@ Docker
 

@@ -31,7 +31,7 @@ jobs:
         # at the exact version it synced from.
         run: |
           make sync-force
-          echo "upstream-commit=$(git -C bin/.cache/upstream rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "upstream-commit=$(git -C .github/scripts/.cache/upstream rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       -
         # Creates (or updates) a PR only when `make sync` produced a diff;
         # a no-op otherwise. Uses the default GITHUB_TOKEN, so the PR it

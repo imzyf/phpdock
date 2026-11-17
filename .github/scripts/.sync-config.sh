@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# bin/sync-upstream.sh 的共享配置（被 source 引入，而非执行）。
+# .github/scripts/sync-upstream.sh 的共享配置（被 source 引入，而非执行）。
 
 # 按需修改以下变量以匹配你的上游仓库。
 UPSTREAM_REPO="https://github.com/laradock/laradock.git"
@@ -26,12 +26,12 @@ IMAGE_DIRS=(
   workspace
 )
 
-# 只镜像到 bin/.upstream/ 供对照的文件（本项目有手写的等价物，见各文件顶部注释）。
+# 只镜像到 .github/scripts/.upstream/ 供对照的文件（本项目有手写的等价物，见各文件顶部注释）。
 # 格式 "上游路径" 或 "上游路径:本地路径"（改名落地）。
 SYNC_FILES=(
   .env.example:.env.upstream
-  docker-compose.yml:bin/.upstream/docker-compose.yml
-  laradock:bin/.upstream/laradock
+  docker-compose.yml:.github/scripts/.upstream/docker-compose.yml
+  laradock:.github/scripts/.upstream/laradock
 )
 
 # 同步时「完全不碰」的路径：既不从上游复制，也不删除本地已有的同名文件。

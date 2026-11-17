@@ -25,4 +25,4 @@ docker-compose.custom.yml
 
 .DS_Store
 
-/bin/.cache
+/.github/scripts/.cache

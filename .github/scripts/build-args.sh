@@ -5,13 +5,13 @@
 # preference 胜出。空值行（NAME=，Dockerfile 里没默认值）跳过，避免
 # 传出空的 --build-arg。首次出现的顺序被保留，输出稳定可 diff。
 #
-# 用法: bin/build-args.sh
+# 用法: .github/scripts/build-args.sh
 #   CI（laradock-image.yml）消费它的输出，make test-args 验证其契约。
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 shopt -s extglob   # 下面用 +([[:space:]]) 剥行尾空白
 

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# bin/build-args.sh 的回归测试，三部分：
+# .github/scripts/build-args.sh 的回归测试，三部分：
 #   1. 输出契约：拿仓库里真实的两个 env 文件跑，检查输出干净、幂等、与 cwd 无关
 #   2. fixture：在临时目录里用假 env 文件覆盖解析与合并的边界情况
 #   3. 交叉检查：输出的每个 NAME 都必须是某个 Dockerfile 声明过的 ARG
 #
-# 用法: bin/test-build-args.sh   （或 make test-args）
+# 用法: .github/scripts/test-build-args.sh   （或 make test-args）
 
 # 断言失败要继续跑完，所以不开 -e；末尾按失败计数退出。
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BUILD_ARGS="${SCRIPT_DIR}/build-args.sh"
 
 failures=0
@@ -51,10 +51,10 @@ echo '## 2. fixture（临时目录 + 假 env 文件）'
 
 FIXTURE="$(mktemp -d)/fixture"
 trap 'rm -rf "${FIXTURE%/fixture}"' EXIT
-mkdir -p "${FIXTURE}/bin" "${FIXTURE}/images"
+mkdir -p "${FIXTURE}/.github/scripts" "${FIXTURE}/images"
 # 用软链而不是 cp：测的永远是仓库里当前那份脚本。
 # BASH_SOURCE 是「调用时的路径」，所以它算出的 ROOT_DIR 是 fixture 而不是本仓库。
-ln -s "${BUILD_ARGS}" "${FIXTURE}/bin/build-args.sh"
+ln -s "${BUILD_ARGS}" "${FIXTURE}/.github/scripts/build-args.sh"
 
 cat > "${FIXTURE}/images/.env.laradock" <<'EOF'
 A=1
@@ -78,7 +78,7 @@ C=3
 X=2
 D=has spaces here
 F=url
-G=only-in-pref' "$(cd "${FIXTURE}" && bin/build-args.sh)"
+G=only-in-pref' "$(cd "${FIXTURE}" && .github/scripts/build-args.sh)"
 
 mv "${FIXTURE}/images/.env.laradock.preference" "${FIXTURE}/images/pref.bak"
 # 同一个文件里重复的 NAME：值取最后一次，位置留在第一次。
@@ -86,13 +86,13 @@ check '缺 preference 时只读 .env.laradock' 'A=dup-in-same-file
 C=3
 X=2
 D=has spaces here
-F=url' "$(cd "${FIXTURE}" && bin/build-args.sh)"
+F=url' "$(cd "${FIXTURE}" && .github/scripts/build-args.sh)"
 
 mv "${FIXTURE}/images/.env.laradock" "${FIXTURE}/images/laradock.bak"
-both_missing="$(cd "${FIXTURE}" && bin/build-args.sh)"
+both_missing="$(cd "${FIXTURE}" && .github/scripts/build-args.sh)"
 check '两个文件都不存在时输出为空' '' "${both_missing}"
 # set -u 下空数组展开曾经是个坑，这里确认它是正常退出而不是崩掉。
-if (cd "${FIXTURE}" && bin/build-args.sh > /dev/null); then
+if (cd "${FIXTURE}" && .github/scripts/build-args.sh > /dev/null); then
   pass '两个文件都不存在时退出码为 0'
 else
   fail '两个文件都不存在时退出码非 0'

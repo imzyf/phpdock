@@ -11,7 +11,7 @@
 # CACHE_DIR 下被缓存 CACHE_TTL_SECONDS（默认 1 天），所以同一天重新运行会重用它。
 # 删除 CACHE_DIR 或设置 LCC_SYNC_CACHE_TTL=0 来强制重新克隆。
 #
-# 使用方法：bin/sync-upstream.sh
+# 使用方法：.github/scripts/sync-upstream.sh
 #
 # 环境变量覆盖：
 #   LCC_SYNC_CACHE_DIR   缓存的上游克隆的位置
@@ -20,8 +20,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
-# shellcheck source=bin/.sync-config.sh
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=.github/scripts/.sync-config.sh
 source "${SCRIPT_DIR}/.sync-config.sh"
 
 CACHE_DIR="${LCC_SYNC_CACHE_DIR:-${SCRIPT_DIR}/.cache/upstream}"
@@ -80,7 +80,7 @@ for pair in "${dir_pairs[@]}"; do
   src="${clone_dir}/${src_dir}"
   # 配置里的目录在上游没了 = 同步已失效，直接失败，别留下过期的本地副本。
   if [[ ! -d "${src}" ]]; then
-    echo "!! ${src_dir} not found upstream - update SYNC_DIRS / IMAGE_DIRS in bin/.sync-config.sh" >&2
+    echo "!! ${src_dir} not found upstream - update SYNC_DIRS / IMAGE_DIRS in .github/scripts/.sync-config.sh" >&2
     exit 1
   fi
   entries=( "${src}"/* )
@@ -112,7 +112,7 @@ for entry in "${SYNC_FILES[@]}"; do
   src="${clone_dir}/${src_rel}"
   # 同 SYNC_DIRS：配置里的文件上游没了就是同步失效，直接失败。
   if [[ ! -f "${src}" ]]; then
-    echo "!! ${src_rel} not found upstream - update SYNC_FILES in bin/.sync-config.sh" >&2
+    echo "!! ${src_rel} not found upstream - update SYNC_FILES in .github/scripts/.sync-config.sh" >&2
     exit 1
   fi
   if [[ "${src_rel}" == "${dest_rel}" ]]; then

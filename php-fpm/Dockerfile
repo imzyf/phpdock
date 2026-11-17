@@ -3,7 +3,7 @@
 #
 # LARADOCK_PHP_VERSION 由 php-fpm/compose.override.yml 的 build.args 传入
 # （值取自 .env 的 PHP_VERSION）。
-# 本文件在 bin/.sync-config.sh 的 EXCLUDE_GLOBS 中，`make sync` 不会覆盖它。
+# 本文件在 .github/scripts/.sync-config.sh 的 EXCLUDE_GLOBS 中，`make sync` 不会覆盖它。
 
 ARG LARADOCK_PHP_VERSION
 FROM ghcr.io/imzyf/phpdock/php-fpm:${LARADOCK_PHP_VERSION}

@@ -10,7 +10,7 @@ PHPDOCK 在不抛弃 Laradock 的前提下解决这三件事：
 
 - **不 fork。** 上游文件原样复制进来，由 `make sync` 刷新。本项目的定制放在它们*旁边*的 `<service>/compose.override.yml`，交给 Docker Compose 原生合并。每周一个 GitHub Action 跑同步并自动开 PR —— 上游的变更以一份可审阅的 diff 抵达，而不是一堆冲突。
 - **不编译。** 三个 Dockerfile 各自只有一行 `FROM`，指向由本仓库 `images/` 构建的多架构预构建镜像（见[预构建镜像](#预构建镜像)）。启动以秒计，不是以分钟计。
-- **只留会跑的。** 裁剪是声明式的，不是一次性手工删文件：`bin/.sync-config.sh` 里的 `SYNC_DIRS` 就是「保留哪些服务」的清单，`make sync` 和生成出来的根 compose 都跟着它走。`EXCLUDE_GLOBS` 在文件级做同样的事，于是保留下来的服务也不会拖着一堆你永远用不到的 PHP 版本配置。想把 Postgres 换成 MySQL、或者把 MailHog 加回来？改一行清单，跑 `make sync`。
+- **只留会跑的。** 裁剪是声明式的，不是一次性手工删文件：`.github/scripts/.sync-config.sh` 里的 `SYNC_DIRS` 就是「保留哪些服务」的清单，`make sync` 和生成出来的根 compose 都跟着它走。`EXCLUDE_GLOBS` 在文件级做同样的事，于是保留下来的服务也不会拖着一堆你永远用不到的 PHP 版本配置。想把 Postgres 换成 MySQL、或者把 MailHog 加回来？改一行清单，跑 `make sync`。
 
 ## 快速开始
 
@@ -35,7 +35,7 @@ docker compose exec workspace bash
 | `<service>/compose.override.yml` | **你的** —— 合并到上游 compose 之上 |
 | `php-fpm/`、`php-worker/`、`workspace/` 的 Dockerfile | **你的** —— 一行 `FROM` 指向预构建镜像 |
 | `.env.example` | **你的** —— 公共设置与覆盖项 |
-| `bin/.sync-config.sh` | **你的** —— 保留哪些服务、哪些文件 |
+| `.github/scripts/.sync-config.sh` | **你的** —— 保留哪些服务、哪些文件 |
 | `docker-compose.yml` | 生成的 —— 跑 `make generate` |
 | `images/<image>/` | 上游 —— 由 `make sync` 刷新，别改 |
 | `images/.env.laradock.preference` | **你的** —— 预构建镜像覆盖的构建 ARG |
@@ -50,7 +50,7 @@ make sync         # 拉取上游、重新生成，然后用 `git diff` 审阅
 make sync-force   # 忽略 1 天的克隆缓存
 ```
 
-同步哪些文件、哪些文件受保护不被同步、根 compose 文件如何生成，都写在 `bin/.sync-config.sh`、`bin/sync-upstream.sh`、`bin/generate-docker-compose.sh` 三个脚本的开头注释里。
+同步哪些文件、哪些文件受保护不被同步、根 compose 文件如何生成，都写在 `.github/scripts/.sync-config.sh`、`.github/scripts/sync-upstream.sh`、`.github/scripts/generate-docker-compose.sh` 三个脚本的开头注释里。
 
 ## 预构建镜像
 
@@ -66,8 +66,8 @@ docker pull ghcr.io/imzyf/phpdock/php-fpm:8.5-20261117   # UTC 发布日期，�
 镜像直接用 laradock 的 Dockerfile 构建，不做修改：
 
 - `make sync` 把上游 Dockerfile 和它构建时 `COPY` 的文件刷新到 `images/<image>/`（即 `IMAGE_DIRS` 里的目录）。
-- laradock 的 Dockerfile 完全靠构建 `ARG` 配置。`make sync` 会运行 `bin/extract-env.sh`，把这些 ARG 抽成 `images/.env.laradock`，每行一个 `NAME=default`。
+- laradock 的 Dockerfile 完全靠构建 `ARG` 配置。`make sync` 会运行 `.github/scripts/extract-env.sh`，把这些 ARG 抽成 `images/.env.laradock`，每行一个 `NAME=default`。
 - `images/.env.laradock.preference` 只写这些镜像覆盖的 ARG，和原版 laradock 的差别一屏就能读完。
-- `bin/build-args.sh` 合并上面两个文件（preference 优先，空值丢弃），是构建参数唯一的组装处。`make test-args` 检查合并规则，并确认输出的每个名字都是某个 Dockerfile 里的 `ARG`；CI 每次构建前都会先跑它。
+- `.github/scripts/build-args.sh` 合并上面两个文件（preference 优先，空值丢弃），是构建参数唯一的组装处。`make test-args` 检查合并规则，并确认输出的每个名字都是某个 Dockerfile 里的 `ARG`；CI 每次构建前都会先跑它。
 
 发布要手动在 [Actions](https://github.com/imzyf/phpdock/actions/workflows/laradock-image.yml) 里运行 `laradock-image` workflow。留这一步人工是有意的：review 同步 PR 时，要判断上游新增的 ARG 需不需要覆盖；而且三个镜像乘两个架构构建成本太高，不该每次 push 都跑。
