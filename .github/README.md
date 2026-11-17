@@ -1,7 +1,5 @@
 # PHPDOCK
 
-[English](README.md) · 简体中文
-
 一套 Docker 上的 PHP 开发环境 —— 底下原封不动地跑着 [Laradock](https://laradock.io/)，上面盖一层预构建镜像。
 
 ## 为什么
