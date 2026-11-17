@@ -82,16 +82,17 @@ file is generated are documented at the top of `bin/.sync-config.sh`,
 ## Prebuilt images
 
 The `php-fpm`, `php-worker`, and `workspace` images are published to
-Docker Hub as `linux/amd64` + `linux/arm64`, with PostgreSQL, Redis,
-ImageMagick and more extensions already compiled in:
+GitHub Container Registry as `linux/amd64` + `linux/arm64`, with
+PostgreSQL, Redis, ImageMagick and more extensions already compiled in:
 
 ```bash
-docker pull yifans/phpdock:8.5-php-fpm          # rolling tag, always the newest build
-docker pull yifans/phpdock:8.5-php-fpm-202607   # year-month snapshot, never moves
+docker pull ghcr.io/imzyf/phpdock/php-fpm:8.5            # rolling tag, always the newest build
+docker pull ghcr.io/imzyf/phpdock/php-fpm:8.5-20261117   # UTC publish date, for pinning and rollback
 ```
 
-Every available tag is listed on
-[Docker Hub](https://hub.docker.com/r/yifans/phpdock/tags).
+The commit an image was built from is in its
+`org.opencontainers.image.revision` label. Every available tag is listed
+under [Packages](https://github.com/imzyf?tab=packages&repo_name=phpdock).
 
 They are built from laradock's own Dockerfiles, kept unmodified:
 

@@ -1,4 +1,5 @@
-# 手动把 laradock 的三个镜像（php-fpm / php-worker / workspace）发布到 Docker Hub。
+# 手动把 laradock 的三个镜像（php-fpm / php-worker / workspace）发布到 GitHub
+# Container Registry，用 workflow 自带的 GITHUB_TOKEN 登录，不需要额外的 secrets。
 #
 # ── 整体结构 ────────────────────────────────────────────────────────────────
 # build（矩阵：image × 架构，各一个 job）→ merge（矩阵：image，各一个 job）
@@ -13,15 +14,17 @@
 # 个 tag 上推——后推的会直接覆盖先推的，tag 最后只剩一个架构。改成各自推成「无 tag
 # 的 manifest」，把 digest 通过 artifact 传给 merge job，由它一次性合并并打 tag。
 #
-# ── tag 策略 ───────────────────────────────────────────────────────────────
-# 每次发布写两个 tag，指向同一份 manifest：
-#   8.5-php-fpm-202607   带年月，不可变快照，用来锁版本和回滚
-#   8.5-php-fpm          滚动 tag，永远指向最新一版
+# ── 镜像名和 tag ───────────────────────────────────────────────────────────
+# 每个镜像一个仓库：ghcr.io/imzyf/phpdock/<image>。每次发布写两个 tag，指向
+# 同一份 manifest：
+#   8.5             滚动 tag，永远指向最新一版
+#   8.5-20261117    UTC 发布日期，用来锁版本和回滚；同一天再发布会覆盖它
+# 构建所用的 commit 写在镜像 label org.opencontainers.image.revision 里，
+# 用 docker buildx imagetools inspect <ref> --format '{{json .Image}}' 查看。
 #
-# ── Docker Hub 网页显示 ────────────────────────────────────────────────────
-# imagetools create 配上 attestation，tag 会进不了 Hub 的网页和元数据 API（registry
-# 里一切正常）。build 步骤加 provenance: false 就好了，2026-07-30 验证过，别删。
-# 验证发布只看 registry：docker buildx imagetools inspect yifans/phpdock:8.5-php-fpm
+# ── 首次发布 ───────────────────────────────────────────────────────────────
+# ghcr.io 上新建的 package 默认是 private。三个镜像第一次发布后，要分别在
+# package 设置里改成 public，否则匿名 docker pull 会失败。workflow 改不了这个设置。
 
 name: laradock-image
 
@@ -31,16 +34,18 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 env:
-  REGISTRY_IMAGE: yifans/phpdock
+  REGISTRY_IMAGE: ghcr.io/imzyf/phpdock
 
 jobs:
   build:
     # arm64 跑在 GitHub 免费的原生 arm runner 上，不再用 QEMU 模拟（快 5-10 倍）。
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     env:
-      # 只有主仓库才推送镜像；fork 拿不到 Docker Hub secrets，只做构建验证。
+      # 只有主仓库才推送镜像；REGISTRY_IMAGE 在 imzyf 名下，fork 的 GITHUB_TOKEN
+      # 推不上去，所以 fork 只做构建验证。
       # 下面所有推送相关的 step 都靠这个开关，fork 上会整段跳过而不是报错。
       PUBLISH: ${{ github.repository == 'imzyf/phpdock' }}
       # artifact 名字里不能有斜杠，所以要把 linux/arm64 压成 arm64 才能拼进去。
@@ -76,12 +81,13 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       -
-        name: Login to Docker Hub
+        name: Login to GitHub Container Registry
         if: env.PUBLISH == 'true'
         uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       -
         # 单架构镜像先按 digest 推送（不占用 tag），由 merge job 合成多架构 manifest。
         # outputs 里三个参数的作用：
@@ -96,11 +102,14 @@ jobs:
           context: images/${{ matrix.image }}
           file: images/${{ matrix.image }}/Dockerfile
           platforms: ${{ matrix.platform }}
-          outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY_IMAGE) || 'type=cacheonly' }}
-          # 关掉 provenance attestation：开着的话单架构构建会多套一层 index
-          # （platform 显示成 unknown/unknown），而且 tag 不进 Docker Hub 网页
-          # （见文件头）。别删。
+          outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY_IMAGE, matrix.image) || 'type=cacheonly' }}
+          # 关掉 provenance attestation：开着的话单架构构建会多套一层 index，
+          # 合成的 manifest 里多出 platform 为 unknown/unknown 的条目。
           provenance: false
+          # source 让 ghcr.io 把 package 关联到本仓库；revision 记录构建所用的 commit。
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
             ${{ steps.build-args.outputs.args }}
             LARADOCK_PHP_VERSION=${{ matrix.php_version }}
@@ -151,11 +160,12 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       -
-        name: Login to Docker Hub
+        name: Login to GitHub Container Registry
         uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       -
         # 把两个单架构 digest 合成一份多架构 manifest list，一次打上两个 tag。
         # 一条 imagetools create 同时给两个 tag，保证它们必定指向同一份 manifest，
@@ -163,13 +173,14 @@ jobs:
         name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
-          base="${REGISTRY_IMAGE}:${{ matrix.php_version }}-${{ matrix.image }}"
-          # 用 UTC 取年月，避免跨时区在月底那天算出不同的月份。
-          dated="${base}-$(date -u +%Y%m)"
+          repo="${REGISTRY_IMAGE}/${{ matrix.image }}"
+          base="${repo}:${{ matrix.php_version }}"
+          # 用 UTC 取日期，避免不同时区的 runner 在同一时刻算出不同的日期。
+          dated="${base}-$(date -u +%Y%m%d)"
           # 目录里的文件名就是 digest（见 build job 的 Export digest），glob 出来
           # 拼成 repo@sha256:xxx 的引用列表喂给 imagetools。
-          mapfile -t refs < <(printf "${REGISTRY_IMAGE}@sha256:%s\n" *)
+          mapfile -t refs < <(printf "${repo}@sha256:%s\n" *)
           docker buildx imagetools create -t "$dated" -t "$base" "${refs[@]}"
-          # 立刻回读一次：这是唯一可信的发布验证（Docker Hub 网页不可信，见文件头）。
-          # 输出里应该恰好有 amd64 和 arm64 两个平台条目。
+          # 立刻从 registry 回读一次确认发布结果：输出里应该恰好有 amd64 和 arm64
+          # 两个平台条目。
           docker buildx imagetools inspect "$base"

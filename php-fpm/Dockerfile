@@ -6,7 +6,7 @@
 # 本文件在 bin/.sync-config.sh 的 EXCLUDE_GLOBS 中，`make sync` 不会覆盖它。
 
 ARG LARADOCK_PHP_VERSION
-FROM yifans/phpdock:${LARADOCK_PHP_VERSION}-php-fpm
+FROM ghcr.io/imzyf/phpdock/php-fpm:${LARADOCK_PHP_VERSION}
 
 WORKDIR /var/www
 

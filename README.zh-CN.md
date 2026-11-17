@@ -56,14 +56,14 @@ make sync-force   # 忽略 1 天的克隆缓存
 
 ## 预构建镜像
 
-`php-fpm`、`php-worker`、`workspace` 三个镜像发布在 Docker Hub，支持 `linux/amd64` 和 `linux/arm64`，已编译好 PostgreSQL、Redis、ImageMagick 等扩展：
+`php-fpm`、`php-worker`、`workspace` 三个镜像发布在 GitHub Container Registry，支持 `linux/amd64` 和 `linux/arm64`，已编译好 PostgreSQL、Redis、ImageMagick 等扩展：
 
 ```bash
-docker pull yifans/phpdock:8.5-php-fpm          # 滚动 tag，指向最新一版
-docker pull yifans/phpdock:8.5-php-fpm-202607   # 年月快照，内容不再变动
+docker pull ghcr.io/imzyf/phpdock/php-fpm:8.5            # 滚动 tag，指向最新一版
+docker pull ghcr.io/imzyf/phpdock/php-fpm:8.5-20261117   # UTC 发布日期，用来锁版本和回滚
 ```
 
-全部可用的 tag 见 [Docker Hub](https://hub.docker.com/r/yifans/phpdock/tags)。
+镜像是从哪个 commit 构建的，记录在它的 `org.opencontainers.image.revision` label 里。全部可用的 tag 见 [Packages](https://github.com/imzyf?tab=packages&repo_name=phpdock)。
 
 镜像直接用 laradock 的 Dockerfile 构建，不做修改：
 
