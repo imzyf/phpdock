@@ -5,7 +5,7 @@
 # Override with `make COMPOSE=docker-compose <target>` if you still need v1.
 COMPOSE ?= docker compose
 
-.PHONY: help sync sync-force generate up up-all down build
+.PHONY: help sync sync-force generate test-args up up-all down build
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} \
@@ -17,6 +17,7 @@ help: ## Show this help
 
 sync: .env ## Pull latest files from upstream, regenerate, then review with `git diff`
 	bin/sync-upstream.sh
+	bin/extract-env.sh
 	@$(MAKE) --no-print-directory generate
 	@$(COMPOSE) config >/dev/null \
 		&& echo "==> docker compose config OK. Review upstream changes: git diff"
@@ -26,6 +27,11 @@ sync-force: ## Sync from upstream, ignoring the clone cache
 
 generate: ## Regenerate docker-compose.yml from upstream + */compose.override.yml
 	bin/generate-docker-compose.sh
+
+##@ Images
+
+test-args: ## Check that bin/build-args.sh still merges the image build args correctly
+	bin/test-build-args.sh
 
 ##@ Docker
 

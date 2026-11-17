@@ -54,4 +54,5 @@ jobs:
 
             `docker compose config` already passed on this branch, so the
             generated `docker-compose.yml` is at least valid. Review the diff
-            before merging.
+            before merging. Merging does not publish images: run
+            `laradock-image` by hand to build and push the new tags.

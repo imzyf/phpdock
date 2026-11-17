@@ -17,6 +17,15 @@ SYNC_DIRS=(
   workspace
 )
 
+# 预构建镜像的构建源：上游的 <dir>/ 完整同步到 images/<dir>/，含 Dockerfile 和它
+# build 阶段 COPY 的文件。与 SYNC_DIRS 里的同名目录各自独立，两边的 EXCLUDE_GLOBS
+# 按落地路径区分。
+IMAGE_DIRS=(
+  php-fpm
+  php-worker
+  workspace
+)
+
 # 只镜像到 bin/.upstream/ 供对照的文件（本项目有手写的等价物，见各文件顶部注释）。
 # 格式 "上游路径" 或 "上游路径:本地路径"（改名落地）。
 SYNC_FILES=(
@@ -26,7 +35,8 @@ SYNC_FILES=(
 )
 
 # 同步时「完全不碰」的路径：既不从上游复制，也不删除本地已有的同名文件。
-# 只匹配 SYNC_DIRS 下的顶级条目（<dir>/<name>），更深的路径不支持。
+# 按落地路径匹配，只覆盖 SYNC_DIRS 的 <dir>/<name> 和 IMAGE_DIRS 的
+# images/<dir>/<name> 这一层，更深的路径不支持。
 # 因此这里同时用于两件事：
 #   1. 保护本项目手写、且与上游同名的文件（三个 Dockerfile）；
 #   2. 剪掉用不到的上游文件（那些 .ini 本地就不存在，跳过即保持不存在）。
@@ -72,4 +82,23 @@ EXCLUDE_GLOBS=(
   'workspace/mc'
   'workspace/.npmrc'
   'workspace/xdebug.ini'
+
+  # ---- images/ ----
+  # 镜像只构建 PHP 8.5，不需要的扩展配置不拉
+  'images/php-fpm/aerospike.ini'
+  'images/php-fpm/mysql.ini'
+  'images/php-fpm/php5*.ini'
+  'images/php-fpm/php7*.ini'
+  'images/php-fpm/php8*.ini'
+  'images/php-fpm/phalcon.ini'
+  'images/php-fpm/xhprof.ini'
+  'images/php-fpm/xdebug'
+  'images/workspace/aerospike.ini'
+  # 运行时的 compose 定义在根目录的同名服务里，镜像构建用不到
+  'images/*/compose.yml'
+  'images/*/defaults.env'
+  # laradock 公开的 demo key。本地两个文件是空的占位，只为满足 Dockerfile 的
+  # COPY：真实私钥会触发 secret scanning，还会留在发布镜像的 /tmp/id_rsa 里
+  # （删除它的 rm 只在 INSTALL_WORKSPACE_SSH=true 时执行）。
+  'images/workspace/insecure_id_rsa*'
 )
